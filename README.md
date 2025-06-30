@@ -5,6 +5,15 @@ This is the official repo for [OCTCube-M: A 3D multimodal optical coherence tomo
 
 Please contact 	**zucksliu@cs.washington.edu** or **swang@cs.washington.edu** if you have questions.
 
+### Update `2025-06-29`
+- Docker available! Check out the [docker](https://hub.docker.com/repositories/zucksliu)
+- You can try the basic development environment by running:
+``` docker pull zucksliu/octcubem_pytorch_2.4.1-cuda12.4-cudnn9 ```
+- To run the inference notebook, you can use the following docker:
+``` docker pull zucksliu/octcube-multi-cls-tool/general ```
+- We update the inference notebook with two threshold options, one for general healthy / diseased classification (distribution based on the training set of OCTCube), and one for screening purposes: this setting is more conservative and will only classify a volume as diseased if it is very likely to be diseased. This is useful for screening purposes where you want to minimize false positives. For more details, please refer to the [inference notebook](https://github.com/ZucksLiu/OCTCubeM/blob/main/inference_OCTCube.ipynb)
+- Have fun computing with OCTCube-M! 🚀
+
 ### 🚀Checklist
 - [] Release a tri-modal OCTCube-EF model instance trained on AI-READI dataset.
 - [] Prepare the inference code for using our OCTCube-IR model.
