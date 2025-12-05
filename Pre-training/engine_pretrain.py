@@ -34,6 +34,7 @@ def train_one_epoch_joint(
     epoch: int,
     loss_scaler,
     data_loader_2d,
+    dataset_2d_filename2frame_indices,
     dataset_2d_all_image_dict,
     mask_ratio_2d,
     log_writer=None,
@@ -79,7 +80,7 @@ def train_one_epoch_joint(
     secondary_iter = iter(data_loader_2d)  # Create an iterator for the secondary data loader
     print('Initiate secondary data loader', f'len(data_loader_2d): {len(data_loader_2d)}', len(data_loader_2d)*args.batch_size_2d)
 
-    for data_iter_step, (samples, data_info) in enumerate(
+    for data_iter_step, (samples, filenames) in enumerate(
         metric_logger.log_every(data_loader, print_freq, header)
     ):
         # we use a per iteration (instead of per epoch) lr scheduler
@@ -87,8 +88,6 @@ def train_one_epoch_joint(
             lr_sched.adjust_learning_rate(
                 optimizer, data_iter_step / len(data_loader) + epoch, args
             )
-        img_names = data_info[0]
-        data_dict = data_info[1]
 
         try:
             secondary_data = next(secondary_iter)
@@ -97,15 +96,12 @@ def train_one_epoch_joint(
             secondary_data = next(secondary_iter)
 
         sample_2d = secondary_data[0]
-        sample_2d_info = secondary_data[1]
 
         samples = samples.to(device, non_blocking=True)
 
         if len(samples.shape) == 6:
             b, r, c, t, h, w = samples.shape
             samples = samples.reshape(b * r, c, t, h, w)
-
-
 
         with torch.cuda.amp.autocast(enabled=not fp32, dtype=torch.float16 if fp16 else None):
 
@@ -132,18 +128,18 @@ def train_one_epoch_joint(
 
         for j, vol in enumerate(frame_loss):
             cube_size = 3
-            frame_name_list = [data_dict['frames'][nf][j] for nf in range(len(data_dict['frames']))]
+            frame_idx_list = dataset_2d_filename2frame_indices[filenames[j]]
 
             for k, frame_loss in enumerate(vol):
                 # k ranges from 0 to 20
                 # each frame_loss goes for 3 frames
                 for fr in range(cube_size):
-                    frame_name = frame_name_list[k * cube_size + fr]
-                    dataset_2d_all_image_dict[frame_name]['mse_loss'] = frame_loss.item()
-                    dataset_2d_all_image_dict[frame_name]['hardness'] = frame_loss.item()
+                    frame_idx = frame_idx_list[k * cube_size + fr]
+                    dataset_2d_all_image_dict[frame_idx]['mse_loss'] = frame_loss.item()
+                    dataset_2d_all_image_dict[frame_idx]['hardness'] = frame_loss.item()
 
-            dataset_2d_all_image_dict[frame_name_list[-1]]['mse_loss'] = frame_loss.item()
-            dataset_2d_all_image_dict[frame_name_list[-1]]['hardness'] = frame_loss.item()
+            dataset_2d_all_image_dict[frame_idx_list[-1]]['mse_loss'] = frame_loss.item()
+            dataset_2d_all_image_dict[frame_idx_list[-1]]['hardness'] = frame_loss.item()
 
 
         loss = loss + loss_2d

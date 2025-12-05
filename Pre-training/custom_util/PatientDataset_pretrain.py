@@ -1,11 +1,13 @@
 # Copyright (c) Zixuan Liu et al, OCTCubeM group
 # All rights reserved.
-
-
+import glob
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
 import os
+import zipfile
+from io import BytesIO
+
 import torch
 import numpy as np
 import pickle as pkl
@@ -87,8 +89,6 @@ class Inhouse_and_Kermany_Dataset(Dataset):
             return frame.unsqueeze(0), (2, idx-len(self.dataset1), torch.tensor(filtered_img).unsqueeze(0), path_no_home)
 
 
-
-
 class PatientDatasetCenter2D_inhouse_pretrain(PatientDatasetCenter2D_inhouse):
     def __init__(self, root_dir, task_mode='multi_label', dataset_mode='frame', transform=None, convert_to_tensor=False, return_patient_id=False, out_frame_idx=False, name_split_char='-', iterate_mode='visit', downsample_width=True, mode='rgb', patient_id_list_dir='multi_cls_expr_10x_0315/', disease='AMD', disease_name_list=None, metadata_fname=None, downsample_normal=False, downsample_normal_factor=10, enable_spl=False, return_mask=False, mask_dir=home_directory + '/all_seg_results_collection/seg_results/', mask_transform=None, metadata_dir='Oph_cls_task/', **kwargs):
         """
@@ -110,14 +110,25 @@ class PatientDatasetCenter2D_inhouse_pretrain(PatientDatasetCenter2D_inhouse):
 
         """
 
-        super().__init__(root_dir, dataset_mode=dataset_mode, task_mode=task_mode, transform=transform, downsample_width=downsample_width, convert_to_tensor=convert_to_tensor, return_patient_id=return_patient_id, out_frame_idx=out_frame_idx, name_split_char=name_split_char, iterate_mode=iterate_mode, mode=mode, patient_id_list_dir=patient_id_list_dir, metadata_dir=metadata_dir, **kwargs)
+        self.zip_paths = sorted(glob.glob(os.path.join(root_dir, "*/*.zip")))
+        with open(os.path.join(os.path.dirname(root_dir), "meta_info.json"), 'r') as f:
+            meta_info = json.load(f)
 
+        self.all_image_list = []
+        self.filename2frame_indices = {}
+        idx = 0
+        for zip_path in self.zip_paths:
+            filename = os.path.basename(zip_path).split('.')[0]
+            frame_indices = []
+            for i in range(meta_info[filename][0]):
+                self.all_image_list.append([zip_path, i])
+                frame_indices.append(idx)
+                idx += 1
+            self.filename2frame_indices[filename] = frame_indices
+        assert idx == len(self.all_image_list)
 
-        self.all_image_list, self.all_image_dict = self.get_all_image_list_and_dict()
-        self.return_mask = return_mask
-        self.mask_dir = mask_dir
-        self.update_len_dataset_list()
-        self.mask_transform = mask_transform
+        self.all_image_dict = [{'hardness': 0, 'mse_loss': 0} for _ in range(len(self.all_image_list))]
+        self.transform = transform
 
         if enable_spl:
             self.init_spl(K=0.1)
@@ -127,66 +138,19 @@ class PatientDatasetCenter2D_inhouse_pretrain(PatientDatasetCenter2D_inhouse):
         self.K = K
         self.enable_spl = True
 
-        self.visible_frame_num = int(self.K * self.len_all_dataset)
+        self.visible_frame_num = int(self.K * len(self.all_image_list))
         rng = np.random.default_rng(seed)
-        self.idx_to_frame = rng.choice(self.len_all_dataset, self.visible_frame_num, replace=False)
+        self.idx_to_frame = rng.choice(self.all_image_list, self.visible_frame_num, replace=False)
 
     def update_spl(self, K=0.1):
         self.K = K
-        self.visible_frame_num = int(self.K * self.len_all_dataset)
+        self.visible_frame_num = int(self.K * len(self.all_image_list))
         hardness_list = []
-        for idx in range(self.len_all_dataset):
-            hardness_list.append(self.all_image_dict[self.all_image_list[idx]]['hardness'])
+        for idx in range(len(self.all_image_list)):
+            hardness_list.append(self.all_image_dict[idx]['hardness'])
 
         hardness_list = np.argsort(hardness_list)[::-1] # descending order
         self.idx_to_frame = hardness_list[:self.visible_frame_num]
-
-    def update_len_dataset_list(self):
-        self.len_all_dataset = len(self.all_image_list)
-
-    def get_all_image_list_and_dict(self, test_patient_id_list=None):
-        image_list = []
-        image_dict = {}
-        if test_patient_id_list is not None:
-            excluded_patient_id_list = []
-        assert self.dataset_mode == 'frame' and self.iterate_mode == 'visit'
-        for idx in range(len(self.visits_dict)):
-            data_dict = self.visits_dict[idx]
-            patient_id = self.mapping_visit2patient[idx]
-            if test_patient_id_list is not None and patient_id in test_patient_id_list:
-                excluded_patient_id_list.append(patient_id)
-                continue
-            frames = data_dict['frames']
-            image_list += frames
-            for frame in frames:
-                image_dict[frame] = {'patient_idx': patient_id, 'visit_hash': data_dict['visit_hash'], 'mask': 0, 'hardness': 0, 'mse_loss': 0}
-        if test_patient_id_list is not None:
-            print('excluded_patient_id_list:', len(excluded_patient_id_list), len(test_patient_id_list))
-            print(len(set(excluded_patient_id_list)), len(set(test_patient_id_list)))
-        print(idx, 'len(image_list):', len(image_list))
-
-
-        return image_list, image_dict
-
-    def get_all_image_list(self, test_patient_id_list=None):
-        image_list = []
-        if test_patient_id_list is not None:
-            excluded_patient_id_list = []
-        assert self.dataset_mode == 'frame' and self.iterate_mode == 'visit'
-        for idx in range(len(self.visits_dict)):
-            data_dict = self.visits_dict[idx]
-            patient_id = self.mapping_visit2patient[idx]
-            if test_patient_id_list is not None and patient_id in test_patient_id_list:
-                excluded_patient_id_list.append(patient_id)
-                continue
-            frames = data_dict['frames']
-            image_list += frames
-        if test_patient_id_list is not None:
-            print('excluded_patient_id_list:', len(excluded_patient_id_list), len(test_patient_id_list))
-            print(len(set(excluded_patient_id_list)), len(set(test_patient_id_list)))
-        print(idx, 'len(image_list):', len(image_list))
-        return image_list
-
 
     def __len__(self):
         if self.enable_spl:
@@ -194,18 +158,16 @@ class PatientDatasetCenter2D_inhouse_pretrain(PatientDatasetCenter2D_inhouse):
         else:
             return len(self.all_image_list)
 
-
     def __getitem__(self, idx):
         if self.enable_spl:
             idx = self.idx_to_frame[idx]
-        image_path = self.all_image_list[idx]
-        frame = Image.open(self.root_dir + image_path, mode='r')
-        if self.return_mask:
-            try:
-                mask_path = self.mask_dir + image_path
-                mask = Image.open(mask_path, mode='r')
-            except:
-                mask = Image.new('L', frame.size)
+        zip_path = self.all_image_list[idx][0]
+        frame_idx = self.all_image_list[idx][1]
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            filenames = sorted(zip_ref.namelist(), key=lambda x: int(x.split('_')[-1].split('.')[0]))
+            slice_data = zip_ref.read(filenames[frame_idx])
+            f = BytesIO(slice_data)
+            frame = Image.open(f)
 
         if self.mode == 'gray':
             frame = frame.convert("L")
@@ -218,8 +180,6 @@ class PatientDatasetCenter2D_inhouse_pretrain(PatientDatasetCenter2D_inhouse):
                 frame = frame.resize((frame.size[0], frame.size[1] // 2))
         if self.transform:
             frame = self.transform(frame)
-        if self.return_mask and self.mask_transform:
-            mask = self.mask_transform(mask)
 
         # Convert frame to tensor (if not already done by transform)
         if self.convert_to_tensor and not isinstance(frame, torch.Tensor):
@@ -230,10 +190,8 @@ class PatientDatasetCenter2D_inhouse_pretrain(PatientDatasetCenter2D_inhouse):
         frame_img = np.array(frame)
         val = filters.threshold_otsu(frame_img)
         filtered_img = frame_img > val
-        if self.return_mask:
-            return frame.unsqueeze(0), (idx, filtered_img, mask)
-        else:
-            return frame.unsqueeze(0), (idx, filtered_img)
+
+        return frame.unsqueeze(0), (idx, filtered_img)
 
 
 

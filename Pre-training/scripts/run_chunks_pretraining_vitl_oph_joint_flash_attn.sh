@@ -1,28 +1,44 @@
-# Copyright (c) Zixuan Liu et al, OCTCubeM group
-# All rights reserved.
+#!/bin/bash
 
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-# --------------------------------------------------------
-# References:
-# DeiT: https://github.com/facebookresearch/deit
-# BEiT: https://github.com/microsoft/unilm/tree/master/beit
-# MAE: https://github.com/facebookresearch/mae/tree/main
-# MAE_ST: https://github.com/facebookresearch/mae_st
-# --------------------------------------------------------
+# Set job name
+#SBATCH --job-name=med_oct_foundation_run1
+# Specify the number of nodes and processors and gpus per nodes
+#SBATCH --nodes=1 --ntasks-per-node=1 --gpus-per-node=1
+#SBATCH --cpus-per-task=17
 
 
-OUTPUTDIR=YOUR_OUTPUT_DIR
-prefix=YOUR_PREFIX
-DATA_PATH=$HOME/$prefix/Ophthal/
-SPLIT_PATH=$HOME/$prefix/OCTCubeM/assets/Oph_cls_task/scr_train_val_test_split_622/
-kermany_data_dir=$HOME/$prefix/OCTCubeM/assets/ext_oph_datasets/Kermany/CellData/OCT/
-patient_id_list_dir=$HOME/$prefix/multi_label_expr_all/
-metadata_dir=$HOME/$prefix/OCTCubeM/assets/Oph_cls_task/
+# For ascend cluster, we have nextgen and quad nodes
+#SBATCH --partition=nextgen
+
+
+# Specify the amount of time for this job
+#SBATCH --time=96:00:00
+
+# Specify the maximum amount of physical memory required
+#SBATCH --mem=128gb
+
+# Specify an account when more than one available
+#SBATCH --account=PCON0023
+
+
+# Load modules:
+module load cuda/11.8.0
+
+module load miniconda3/24.1.2-py310
+
+source activate oct_base
+
+cd /fs/ess/PCON0023/shileicao/code/OCTCubeM
+
+
+OUTPUTDIR=pretrain-output
+prefix=oct
+DATA_PATH=/fs/ess/PCON0023/eye3d/data/ukbiobank/oct
+kermany_data_dir=/fs/ess/PCON0023/eye3d/data/CellData/OCT/
 pretrain_type=training_new
 init_ckpt_path=OCTCubeM/ckpt/OCTCube.pth
 
-BSZ=1
+BSZ=4
 INPUTSIZE=256
 ACCUMSTEPS=1
 EPOCHS=50
@@ -33,13 +49,10 @@ RATIO=0.9
 SCHEDULER="bsz-$BSZ-inputsize-$INPUTSIZE-aacumsteps$ACCUMSTEPS-ep-$EPOCHS-lr-$BLR-2d512-flash-attn-$pretrain_type"
 OUTPUTDIR=$OUTPUTDIR/$SCHEDULER
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun --nproc_per_node=4 --master_port=25680 run_pretrain_oph_joint_2d512_flash_attn.py \
+python run_pretrain_oph_joint_2d512_flash_attn.py \
         --data_path $DATA_PATH \
         --output_dir $OUTPUTDIR \
-        --split_path $SPLIT_PATH \
         --kermany_data_dir $kermany_data_dir \
-        --patient_id_list_dir $patient_id_list_dir \
-        --metadata_dir $metadata_dir \
         --log_dir $OUTPUTDIR/log_dir \
         --batch_size $BSZ \
         --accum_iter $ACCUMSTEPS \

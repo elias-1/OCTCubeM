@@ -36,11 +36,9 @@ import models_mae_joint_res_flash_attn as models_mae
 from engine_pretrain import train_one_epoch_joint, eval_one_epoch
 
 from custom_util.misc import NativeScalerWithGradNormCount as NativeScaler
-from custom_util.misc import convert_spatial_pos_embed
-from custom_util.PatientDataset import TransformableSubset
-from custom_util.PatientDataset_inhouse import PatientDatasetCenter2D_inhouse, PatientDataset3D_inhouse, create_3d_transforms, load_patient_list
+
+from custom_util.PatientDataset_inhouse import PatientDataset3D_inhouse, create_3d_transforms, load_patient_list
 from custom_util.PatientDataset_pretrain import PatientDatasetCenter2D_inhouse_pretrain, Inhouse_and_Kermany_Dataset
-from tensorboard.compat.tensorflow_stub.io.gfile import register_filesystem
 from torch.utils.tensorboard import SummaryWriter
 
 import torchvision.transforms as transforms
@@ -316,47 +314,73 @@ def main(args):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ])
 
-    dataset_train_2d = PatientDatasetCenter2D_inhouse_pretrain(root_dir=args.data_path, task_mode='multi_label', disease='AMD', disease_name_list=None, metadata_fname=None, dataset_mode='frame', transform=transform_2d_train, iterate_mode='visit', downsample_width=True, patient_id_list_dir=args.patient_id_list_dir, enable_spl=True, mask_transform=transform_2d_train, return_mask=False, metadata_dir=args.metadata_dir)
+    dataset_train_2d = PatientDatasetCenter2D_inhouse_pretrain(
+        root_dir=args.data_path,
+        task_mode='multi_label',
+        disease='AMD',
+        disease_name_list=None,
+        metadata_fname=None,
+        dataset_mode='frame',
+        transform=transform_2d_train,
+        iterate_mode='visit',
+        downsample_width=True,
+        patient_id_list_dir=args.patient_id_list_dir,
+        enable_spl=True,
+        mask_transform=transform_2d_train,
+        return_mask=False,
+        metadata_dir=args.metadata_dir)
 
-    test_pat_id = load_patient_list(args.split_path, split='test', name_suffix='_pat_list.txt')
-    included_patient = list(dataset_train_2d.patients.keys())
-    filtered_test_pat_id = sorted(list(set(test_pat_id) & set(included_patient)))
-
-    dataset_train_2d.all_image_list = dataset_train_2d.get_all_image_list(filtered_test_pat_id)
-
-    dataset_train_2d.update_len_dataset_list()
     dataset_train_2d.init_spl(K=0.2)
     dataset_train_2d_kermany = datasets.ImageFolder(os.path.join(args.kermany_data_dir, 'train'), transform=transform_2d_train)
     dataset_train_2d_all = Inhouse_and_Kermany_Dataset(dataset_train_2d, dataset_train_2d_kermany)
 
-
     # 3d dataset
     transform_train, transform_eval = create_3d_transforms(**vars(args))
 
-    dataset = PatientDataset3D_inhouse(root_dir=args.data_path, task_mode='multi_label', disease='AMD', disease_name_list=None, metadata_fname=None, dataset_mode='frame', mode='gray', transform=None, iterate_mode='visit', downsample_width=True, patient_id_list_dir=args.patient_id_list_dir, pad_to_num_frames=True, padding_num_frames=args.num_frames, transform_type='monai_3D', return_img_w_patient_and_visit_name=True, return_data_dict=True, metadata_dir=args.metadata_dir)
+    dataset_train = PatientDataset3D_inhouse(
+        root_dir=args.data_path,
+        task_mode='multi_label',
+        disease='AMD',
+        disease_name_list=None,
+        metadata_fname=None,
+        dataset_mode='frame',
+        mode='gray',
+        transform=transform_train,
+        iterate_mode='visit',
+        downsample_width=True,
+        patient_id_list_dir=args.patient_id_list_dir,
+        pad_to_num_frames=True,
+        padding_num_frames=args.num_frames,
+        transform_type='monai_3D',
+        return_img_w_patient_and_visit_name=True,
+        return_data_dict=True,
+        metadata_dir=args.metadata_dir)
 
-    train_pat_id = load_patient_list(args.split_path, split='train', name_suffix='_pat_list.txt')
-    val_pat_id = load_patient_list(args.split_path, split='val', name_suffix='_pat_list.txt')
-    test_pat_id = load_patient_list(args.split_path, split='test', name_suffix='_pat_list.txt')
-    included_patient = list(dataset.patients.keys())
+    dataset_val = PatientDataset3D_inhouse(
+        root_dir=args.data_path,
+        task_mode='multi_label',
+        disease='AMD',
+        disease_name_list=None,
+        metadata_fname=None,
+        dataset_mode='frame',
+        mode='gray',
+        transform=transform_eval,
+        iterate_mode='visit',
+        downsample_width=True,
+        patient_id_list_dir=args.patient_id_list_dir,
+        pad_to_num_frames=True,
+        padding_num_frames=args.num_frames,
+        transform_type='monai_3D',
+        return_img_w_patient_and_visit_name=True,
+        return_data_dict=True,
+        metadata_dir=args.metadata_dir,
+        train_val_test='val'
+    )
 
-    filtered_train_pat_id = sorted(list(set(train_pat_id) & set(included_patient)))
-    filtered_val_pat_id = sorted(list(set(val_pat_id) & set(included_patient)))
-    filtered_test_pat_id = sorted(list(set(test_pat_id) & set(included_patient)))
-
-    train_pat_indices = dataset.get_visit_idx(filtered_train_pat_id)
-    val_pat_indices = dataset.get_visit_idx(filtered_val_pat_id)
-    test_pat_indices = dataset.get_visit_idx(filtered_test_pat_id)
-
-    final_train_pat_indices = train_pat_indices + val_pat_indices
-    final_val_pat_indices = test_pat_indices
-    dataset_train = TransformableSubset(dataset, final_train_pat_indices)
-    dataset_val = TransformableSubset(dataset, final_val_pat_indices)
-    dataset_train.update_dataset_transform(transform_train)
-
-    all_image_list = dataset_train_2d.all_image_list
+    zip_paths = dataset_train_2d.zip_paths
     all_image_dict = dataset_train_2d.all_image_dict
-    print('Number of train 2d images:', len(all_image_list), len(all_image_dict))
+    filename2frame_indices = dataset_train_2d.filename2frame_indices
+    print('Number of train 2d images:', len(zip_paths), len(all_image_dict))
 
     if args.distributed:
         num_tasks = misc.get_world_size()
@@ -613,12 +637,10 @@ def main(args):
             fp32=args.fp32,
             fp16=args.fp16,
             data_loader_2d=data_loader_train_2d,
+            dataset_2d_filename2frame_indices=filename2frame_indices,
             dataset_2d_all_image_dict=all_image_dict,
             mask_ratio_2d=mask_ratio_2d,
         )
-
-        dataset_train.remove_dataset_transform()
-        dataset_val.update_dataset_transform(transform_eval)
 
         # run the evaluation
         val_stats = eval_one_epoch(
@@ -635,9 +657,6 @@ def main(args):
             data_loader_2d=data_loader_train_2d,
             mask_ratio_2d=0.75,
         )
-
-        dataset_val.remove_dataset_transform()
-        dataset_train.update_dataset_transform(transform_train)
 
         if args.output_dir and (
             epoch % args.checkpoint_period == 0 or epoch + 1 == args.epochs
