@@ -28,7 +28,7 @@ module load miniconda3/24.1.2-py310
 
 source activate oct_base
 
-cd /fs/ess/PCON0023/shileicao/code/OCTCubeM
+cd /fs/ess/PCON0023/shileicao/code/OCTCubeM/Pre-training
 
 
 OUTPUTDIR=pretrain-output

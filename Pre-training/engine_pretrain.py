@@ -15,13 +15,11 @@
 import os
 import math
 from typing import Iterable
-import pickle as pkl
 
 import custom_util.lr_sched as lr_sched
 import custom_util.misc as misc
 import torch
 from iopath.common.file_io import g_pathmgr as pathmgr
-import torch.nn as nn
 import torch.nn.functional as F
 
 
