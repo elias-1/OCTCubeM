@@ -26,7 +26,7 @@ module load cuda/11.8.0
 
 module load miniconda3/24.1.2-py310
 
-source activate oct_base
+source activate octcube
 
 cd /fs/ess/PCON0023/shileicao/code/OCTCubeM/Pre-training
 
