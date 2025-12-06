@@ -22,6 +22,8 @@
 
 #SBATCH --output=pretrain-output/%j_0_log.out
 
+#SBATCH --error=pretrain-output/%j_0_log.err
+
 
 # Load modules:
 module load cuda/11.8.0
