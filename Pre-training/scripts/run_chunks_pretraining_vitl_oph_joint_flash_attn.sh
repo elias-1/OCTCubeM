@@ -20,6 +20,8 @@
 # Specify an account when more than one available
 #SBATCH --account=PCON0023
 
+#SBATCH --output=pretrain-output/%j_0_log.out
+
 
 # Load modules:
 module load cuda/11.8.0
