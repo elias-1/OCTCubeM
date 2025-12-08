@@ -17,6 +17,8 @@ import builtins
 import datetime
 import math
 import os
+import random
+import subprocess
 import time
 from collections import defaultdict, deque, OrderedDict
 
@@ -249,6 +251,18 @@ def save_on_master(state, path):
             torch.save(state, f)
 
 
+
+def _get_master_port(seed: int = 0) -> int:
+    MIN_MASTER_PORT, MAX_MASTER_PORT = (20_000, 60_000)
+
+    master_port_str = os.environ.get("MASTER_PORT")
+    if master_port_str is None:
+        rng = random.Random(seed)
+        return rng.randint(MIN_MASTER_PORT, MAX_MASTER_PORT)
+
+    return int(master_port_str)
+
+
 def init_distributed_mode(args):
     if args.no_env:
         pass
@@ -269,8 +283,33 @@ def init_distributed_mode(args):
         args.world_size = int(os.environ["WORLD_SIZE"])
         args.gpu = int(os.environ["LOCAL_RANK"])
     elif "SLURM_PROCID" in os.environ:
-        args.rank = int(os.environ["SLURM_PROCID"])
+        print("--------We are in a SLURM environment!!!-------")
+        proc_id = int(os.environ['SLURM_PROCID'])
+        ntasks = int(os.environ['SLURM_NTASKS'])
+        node_list = os.environ['SLURM_NODELIST']
+        job_id = int(os.environ["SLURM_JOB_ID"])
+
+        args.rank = proc_id
         args.gpu = args.rank % torch.cuda.device_count()
+        args.world_size = ntasks
+        # Not sure when this environment variable could be None, so use a fallback
+        local_rank_env = os.environ.get('SLURM_LOCALID', None)
+        if local_rank_env is not None:
+            local_rank = int(local_rank_env)
+        else:
+            num_gpus = torch.cuda.device_count()
+            local_rank = proc_id % num_gpus
+        torch.cuda.set_device(local_rank)
+        addr = subprocess.getoutput(
+            f'scontrol show hostname {node_list} | head -n1')
+        port = _get_master_port(seed=job_id)
+        os.environ['MASTER_PORT'] = str(port)
+        # use MASTER_ADDR in the environment variable if it already exists
+        if 'MASTER_ADDR' not in os.environ:
+            os.environ['MASTER_ADDR'] = addr
+        os.environ['WORLD_SIZE'] = str(ntasks)
+        os.environ['LOCAL_RANK'] = str(local_rank)
+        os.environ['RANK'] = str(proc_id)
     else:
         print("Not using distributed mode")
         setup_for_distributed(is_master=True)  # hack
@@ -289,9 +328,9 @@ def init_distributed_mode(args):
     )
     torch.distributed.init_process_group(
         backend=args.dist_backend,
-        init_method=args.dist_url,
-        world_size=args.world_size,
-        rank=args.rank,
+        # init_method=args.dist_url,
+        # world_size=args.world_size,
+        # rank=args.rank,
     )
     torch.distributed.barrier()
     setup_for_distributed(args.rank == 0)
