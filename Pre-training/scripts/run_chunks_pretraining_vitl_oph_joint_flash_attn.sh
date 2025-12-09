@@ -40,7 +40,7 @@ prefix=oct
 DATA_PATH=/fs/ess/PCON0023/eye3d/data/ukbiobank/oct
 kermany_data_dir=/fs/ess/PCON0023/eye3d/data/CellData/OCT/
 pretrain_type=training_new
-init_ckpt_path=OCTCubeM/ckpt/OCTCube.pth
+init_ckpt_path=/fs/ess/PCON0023/shileicao/code/OCTCubeM/ckpt/OCTCube.pth
 
 BSZ=4
 INPUTSIZE=256
