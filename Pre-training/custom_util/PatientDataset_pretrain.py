@@ -109,6 +109,9 @@ class PatientDatasetCenter2D_inhouse_pretrain(PatientDatasetCenter2D_inhouse):
             mode (str): 'rgb', 'gray'
 
         """
+        self.mode = mode
+        self.transform = transform
+        self.downsample_width = downsample_width
 
         self.zip_paths = sorted(glob.glob(os.path.join(root_dir, "*/*.zip")))
         with open(os.path.join(os.path.dirname(root_dir), "meta_info.json"), 'r') as f:
@@ -180,12 +183,6 @@ class PatientDatasetCenter2D_inhouse_pretrain(PatientDatasetCenter2D_inhouse):
                 frame = frame.resize((frame.size[0], frame.size[1] // 2))
         if self.transform:
             frame = self.transform(frame)
-
-        # Convert frame to tensor (if not already done by transform)
-        if self.convert_to_tensor and not isinstance(frame, torch.Tensor):
-            frame = torch.tensor(np.array(frame), dtype=torch.float32)
-            frame = frame.permute(2, 0, 1)
-            print(frame.shape)
 
         frame_img = np.array(frame)
         val = filters.threshold_otsu(frame_img)
