@@ -451,9 +451,8 @@ class PatientDataset3D_inhouse(PatientDatasetCenter2D_inhouse):
             frames_tensor = frames_tensor.squeeze(1)
 
         if self.transform and self.transform_type == 'monai_3D':
+            frames_tensor = frames_tensor.unsqueeze(0)
 
-            frames_tensor = frames_tensor
-
-            frames_tensor = self.transform(frames_tensor)
+            frames_tensor = self.transform({"pixel_values": frames_tensor})["pixel_values"]
 
         return frames_tensor, os.path.basename(zip_path).split('.')[0]

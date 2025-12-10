@@ -482,7 +482,8 @@ def load_model(args, model_without_ddp, optimizer, loss_scaler, load_from_same_p
     if args.init_ckpt:
         print('go into here')
         checkpoint = torch.load(args.init_ckpt, map_location="cpu")
-        msg, msg1 = model_without_ddp.load_state_dict_to_backbone(checkpoint["model"])
+        # msg, msg1 = model_without_ddp.load_state_dict_to_backbone(checkpoint["model"])
+        msg, msg1 = model_without_ddp.load_state_dict(checkpoint["model"], strict=True)
         print('Missing keys: ', msg, 'unexpected keys: ', msg1)
     if args.resume:
         if args.resume.startswith("https"):

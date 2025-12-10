@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set job name
-#SBATCH --job-name=med_oct_foundation_run1
+#SBATCH --job-name=OCTCubeM-Pre-training
 # Specify the number of nodes and processors and gpus per nodes
 #SBATCH --nodes=1 --ntasks-per-node=1 --gpus-per-node=1
 #SBATCH --cpus-per-task=17
@@ -15,7 +15,7 @@
 #SBATCH --time=96:00:00
 
 # Specify the maximum amount of physical memory required
-#SBATCH --mem=128gb
+#SBATCH --mem=64gb
 
 # Specify an account when more than one available
 #SBATCH --account=PCON0023
