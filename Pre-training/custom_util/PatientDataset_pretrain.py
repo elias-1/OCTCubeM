@@ -73,7 +73,7 @@ class Inhouse_and_Kermany_Dataset(Dataset):
     def __getitem__(self, idx):
         if idx < len(self.dataset1):
             data = self.dataset1[idx]
-            path = self.dataset1.all_image_list[data[1][0]]
+            path = self.dataset1.all_image_list[data[1][0]][0]
 
             return data[0], (1, data[1][0], torch.tensor(data[1][1]).unsqueeze(0), path)
         else:
