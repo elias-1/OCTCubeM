@@ -12,7 +12,7 @@
 
 
 # Specify the amount of time for this job
-#SBATCH --time=96:00:00
+#SBATCH --time=36:00:00
 
 # Specify the maximum amount of physical memory required
 #SBATCH --mem=64gb
