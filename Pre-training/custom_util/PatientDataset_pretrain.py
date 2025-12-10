@@ -140,7 +140,7 @@ class PatientDatasetCenter2D_inhouse_pretrain(PatientDatasetCenter2D_inhouse):
 
         self.visible_frame_num = int(self.K * len(self.all_image_list))
         rng = np.random.default_rng(seed)
-        self.idx_to_frame = rng.choice(self.all_image_list, self.visible_frame_num, replace=False)
+        self.idx_to_frame = rng.choice(len(self.all_image_list), self.visible_frame_num, replace=False)
 
     def update_spl(self, K=0.1):
         self.K = K

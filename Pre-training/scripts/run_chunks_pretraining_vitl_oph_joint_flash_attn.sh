@@ -45,7 +45,7 @@ init_ckpt_path=/fs/ess/PCON0023/shileicao/code/OCTCubeM/ckpt/OCTCube.pth
 BSZ=4
 INPUTSIZE=256
 ACCUMSTEPS=1
-EPOCHS=50
+EPOCHS=10
 BLR=1.6e-3
 RATIO=0.9
 
