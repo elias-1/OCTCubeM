@@ -611,8 +611,6 @@ def evaluate(data_loader, model, device, task, epoch, mode, num_class, criterion
                         else:
                             target = target.reshape(sample_num, frame_num)
 
-
-
                 prediction_decode_list.extend(prediction_decode.cpu().detach().numpy())
                 true_label_decode_list.extend(true_label_decode.cpu().detach().numpy())
                 true_label_onehot_list.extend(true_label.cpu().detach().numpy())

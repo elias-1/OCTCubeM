@@ -1,4 +1,8 @@
+import glob
 import os
+import zipfile
+from io import BytesIO
+
 import torch
 import numpy as np
 import pickle as pkl
@@ -434,7 +438,6 @@ class PatientDataset3D_inhouse(PatientDatasetCenter2D_inhouse):
             mode (str): 'rgb', 'gray'
 
         """
-        super().__init__(root_dir, task_mode=task_mode, disease=disease, disease_name_list=disease_name_list, metadata_fname=metadata_fname, dataset_mode=dataset_mode, transform=transform, convert_to_tensor=convert_to_tensor, return_patient_id=return_patient_id, out_frame_idx=False, name_split_char=name_split_char, iterate_mode=iterate_mode, downsample_width=downsample_width, mode=mode, patient_id_list_dir=patient_id_list_dir, multi_task_idx=multi_task_idx, **kwargs)
         self.pad_to_num_frames = pad_to_num_frames
         self.padding_num_frames = padding_num_frames
         self.transform_type = transform_type
@@ -442,106 +445,80 @@ class PatientDataset3D_inhouse(PatientDatasetCenter2D_inhouse):
         self.high_res_transform = high_res_transform
         self.return_both_res_image = return_both_res_image
         self.high_res_num_frames = high_res_num_frames
+        self.train_val_test = kwargs.get('train_val_test', 'train')
 
+        with open(os.path.join(os.path.dirname(root_dir), "train_val_test2.json"), 'r') as f:
+            train_val_test = json.load(f)
+        patient_info = train_val_test[self.train_val_test]
+
+        self.zip_paths = []
+        self.targets = []
+        for patient in patient_info:
+            cur_zip_paths = []
+            for filename in patient_info[patient]['filenames']:
+                cur_zip_paths.append(os.path.join(root_dir, filename.split('_')[0], patient + "_" + filename + '.zip'))
+            self.zip_paths.extend(cur_zip_paths)
+            target = np.array([0, 0, 0, 0, 0, 0, 0, 0])
+            for disease in patient_info[patient]['diseases']:
+                target[int(train_val_test['class_mapping'][disease])] = 1
+            self.targets.extend([target] * len(cur_zip_paths))
+
+        self.idx_to_disease = {train_val_test['class_mapping'][disease]: disease for disease in train_val_test['class_mapping']}
+
+    def __len__(self):
+        return len(self.zip_paths)
 
     def __getitem__(self, idx):
-        if self.iterate_mode == 'patient':
-            raise NotImplementedError
-        elif self.iterate_mode == 'visit':
-            data_dict = self.visits_dict[idx]
-            patient_id = self.mapping_visit2patient[idx]
+        zip_path = self.zip_paths[idx]
+        frames = []
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            filenames = sorted(zip_ref.namelist(), key=lambda x: int(x.split('_')[-1].split('.')[0]))
+            for filename in filenames:
+                slice_data = zip_ref.read(filename)
+                f = BytesIO(slice_data)
+                frames.append(Image.open(f))
 
-        if self.dataset_mode == 'frame' or self.dataset_mode == 'frame_inference_all':
-            frames = [Image.open(self.root_dir + frame_path, mode='r') for frame_path in data_dict['frames']]
-            if self.mode == 'rgb':
-                frames = [frame.convert("RGB") for frame in frames]
-            else:
-                pass
-
-            if self.downsample_width:
-                for i, frame in enumerate(frames):
-                    if frame.size[0] == 1024:
-                        frames[i] = frame.resize((512, frame.size[1]))
-                    if frame.size[1] == 1024 or frame.size[1] == 1536:
-                        frames[i] = frame.resize((frame.size[0], frame.size[1] // 2))
-
-            if self.transform and self.transform_type == 'frame_2D':
-                frames = [self.transform(frame) for frame in frames]
-                if self.return_both_res_image and self.high_res_transform:
-                    frames_high_res = [self.high_res_transform(frame) for frame in frames]
-            elif self.transform and self.transform_type == 'monai_3D':
-                frames = [transforms.ToTensor()(frame) for frame in frames]
-                if self.return_both_res_image and self.high_res_transform:
-                    frames_high_res = frames
-
-            # Convert frame to tensor (if not already done by transform)
-            if self.convert_to_tensor and not isinstance(frames[0], torch.Tensor):
-                frames = [torch.tensor(np.array(frame), dtype=torch.float32) for frame in frames]
-                print(frames[0].shape)
-                frames = [frame.permute(2, 0, 1) for frame in frames]
-
-            frames_tensor = torch.stack(frames) # (num_frames, C, H, W)
-            if self.return_both_res_image and self.high_res_transform:
-                frames_tensor_high_res = torch.stack(frames_high_res)
-
-            if self.pad_to_num_frames:
-                assert self.padding_num_frames is not None
-                num_frames = frames_tensor.shape[0]
-                if num_frames < self.padding_num_frames:
-                    left_padding = (self.padding_num_frames - num_frames) // 2
-                    right_padding = self.padding_num_frames - num_frames - left_padding
-                    left_padding = torch.zeros(left_padding, frames_tensor.shape[-3], frames_tensor.shape[-2], frames_tensor.shape[-1])
-                    right_padding = torch.zeros(right_padding, frames_tensor.shape[-3], frames_tensor.shape[-2], frames_tensor.shape[-1])
-                    frames_tensor = torch.cat([left_padding, frames_tensor, right_padding], dim=0)
-                elif num_frames > self.padding_num_frames:
-                    # get the frames from the middle
-                    if self.same_3_frames:
-                        assert self.padding_num_frames == 3, 'Only support 3 frames to mock 1 frame'
-                        start_idx = (num_frames - 1) // 2
-                        end_idx = start_idx + 1
-                        frames_tensor = frames_tensor[start_idx:end_idx].repeat(3, 1, 1, 1)
-                    else:
-                        # perform center cropping
-                        left_idx = (num_frames - self.padding_num_frames) // 2
-                        right_idx = num_frames - self.padding_num_frames - left_idx
-                        frames_tensor = frames_tensor[left_idx:-right_idx, :, :, :]
-                else:
-                    pass
-                if self.return_both_res_image and self.high_res_transform:
-                    if self.high_res_num_frames is None:
-                        self.high_res_num_frames = self.padding_num_frames
-                    if num_frames < self.high_res_num_frames:
-                        high_res_left_padding = (self.high_res_num_frames - num_frames) // 2
-                        high_res_right_padding = self.high_res_num_frames - num_frames - high_res_left_padding
-                        left_paddings_high_res = torch.zeros(high_res_left_padding, frames_tensor_high_res.shape[-3], frames_tensor_high_res.shape[-2], frames_tensor_high_res.shape[-1])
-                        right_paddings_high_res = torch.zeros(high_res_right_padding, frames_tensor_high_res.shape[-3], frames_tensor_high_res.shape[-2], frames_tensor_high_res.shape[-1])
-                        frames_tensor_high_res = torch.cat([left_paddings_high_res, frames_tensor_high_res, right_paddings_high_res], dim=0)
-                    elif num_frames > self.high_res_num_frames:
-                        high_res_left_idx = (num_frames - self.high_res_num_frames) // 2
-                        high_res_right_idx = num_frames - self.high_res_num_frames - high_res_left_idx
-                        frames_tensor_high_res = frames_tensor_high_res[high_res_left_idx:-high_res_right_idx, :, :, :]
-
-            if self.mode == 'gray':
-                frames_tensor = frames_tensor.squeeze(1)
-                if self.return_both_res_image and self.high_res_transform:
-                    frames_tensor_high_res = frames_tensor_high_res.squeeze(1)
-
-            if self.transform and self.transform_type == 'monai_3D':
-                frames_tensor = frames_tensor.unsqueeze(0)
-
-                frames_tensor = self.transform({"pixel_values": frames_tensor})["pixel_values"]
-
-
-                if self.return_both_res_image and self.high_res_transform:
-                    frames_tensor_high_res = frames_tensor_high_res.unsqueeze(0)
-                    frames_tensor_high_res = self.high_res_transform({"pixel_values": frames_tensor_high_res})["pixel_values"]
-
-
-            if self.return_patient_id:
-                return (frames_tensor, frames_tensor_high_res) if self.return_both_res_image and self.high_res_transform else frames_tensor, (data_dict['class_idx'], patient_id, data_dict['visit_hash'])
-            else:
-                return (frames_tensor, frames_tensor_high_res) if self.return_both_res_image and self.high_res_transform else frames_tensor, data_dict['class_idx']
-
+        if self.mode == 'rgb':
+            frames = [frame.convert("RGB") for frame in frames]
         else:
-            raise NotImplementedError
+            pass
+
+        if self.downsample_width:
+            for i, frame in enumerate(frames):
+                if frame.size[0] == 1024:
+                    frames[i] = frame.resize((512, frame.size[1]))
+                if frame.size[1] == 1024 or frame.size[1] == 1536:
+                    frames[i] = frame.resize((frame.size[0], frame.size[1] // 2))
+
+        if self.transform and self.transform_type == 'frame_2D':
+            frames = [self.transform(frame) for frame in frames]
+
+        elif self.transform and self.transform_type == 'monai_3D':
+            frames = [transforms.ToTensor()(frame) for frame in frames]
+
+        # Convert frame to tensor (if not already done by transform)
+        if self.convert_to_tensor and not isinstance(frames[0], torch.Tensor):
+            frames = [torch.tensor(np.array(frame), dtype=torch.float32) for frame in frames]
+            print(frames[0].shape)
+            frames = [frame.permute(2, 0, 1) for frame in frames]
+
+        frames_tensor = torch.stack(frames)  # (num_frames, C, H, W)
+
+        num_frames = frames_tensor.shape[0]
+
+        # perform center cropping
+        left_idx = (num_frames - self.padding_num_frames) // 2
+        right_idx = num_frames - self.padding_num_frames - left_idx
+
+        frames_tensor = frames_tensor[left_idx:-right_idx, :, :, :]
+
+        if self.mode == 'gray':
+            frames_tensor = frames_tensor.squeeze(1)
+
+        if self.transform and self.transform_type == 'monai_3D':
+            frames_tensor = frames_tensor.unsqueeze(0)
+
+            frames_tensor = self.transform({"pixel_values": frames_tensor})["pixel_values"]
+
+        return frames_tensor, self.targets[idx]
 

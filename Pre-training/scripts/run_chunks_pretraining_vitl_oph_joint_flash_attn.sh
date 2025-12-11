@@ -15,7 +15,7 @@
 #SBATCH --time=36:00:00
 
 # Specify the maximum amount of physical memory required
-#SBATCH --mem=64gb
+#SBATCH --mem=128gb
 
 # Specify an account when more than one available
 #SBATCH --account=PCON0023

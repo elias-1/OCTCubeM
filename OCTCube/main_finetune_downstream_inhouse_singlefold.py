@@ -66,11 +66,6 @@ import models_vit_st_flash_attn_nodrop
 
 home_directory = os.getenv('HOME')
 
-def setup(rank, world_size):
-    dist.init_process_group("nccl", rank=rank, world_size=world_size)
-
-def cleanup():
-    dist.destroy_process_group()
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE fine-tuning for image classification', add_help=False)
@@ -287,7 +282,8 @@ def main(args):
         elif args.transform_type == 'monai_3D':
             train_transform, val_transform = create_3d_transforms(**vars(args))
         if args.patient_dataset_type == '3D' or args.patient_dataset_type == '3D_st' or args.patient_dataset_type == '3D_st_joint' or args.patient_dataset_type.startswith('3D'):
-            dataset_for_Kfold = PatientDataset3D_inhouse(root_dir=args.data_path, transform=None, disease=args.disease, dataset_mode='frame', mode=args.color_mode, task_mode=args.task_mode, iterate_mode='visit', downsample_width=True, patient_id_list_dir=args.patient_id_list_dir, pad_to_num_frames=args.pad_to_num_frames, padding_num_frames=args.num_frames, transform_type=args.transform_type, downsample_normal=args.downsample_normal, same_3_frames=args.same_3_frames, return_both_res_image=args.variable_joint, high_res_transform=None, high_res_num_frames=args.high_res_num_frames, downsample_normal_factor=args.downsample_normal_factor, multi_task_idx=args.multi_task_idx)
+            pass
+            # dataset_for_Kfold = PatientDataset3D_inhouse(root_dir=args.data_path, transform=None, disease=args.disease, dataset_mode='frame', mode=args.color_mode, task_mode=args.task_mode, iterate_mode='visit', downsample_width=True, patient_id_list_dir=args.patient_id_list_dir, pad_to_num_frames=args.pad_to_num_frames, padding_num_frames=args.num_frames, transform_type=args.transform_type, downsample_normal=args.downsample_normal, same_3_frames=args.same_3_frames, return_both_res_image=args.variable_joint, high_res_transform=None, high_res_num_frames=args.high_res_num_frames, downsample_normal_factor=args.downsample_normal_factor, multi_task_idx=args.multi_task_idx)
         elif args.patient_dataset_type == 'Center2D' or args.patient_dataset_type == 'Center2D_flash_attn':
             dataset_for_Kfold = PatientDatasetCenter2D_inhouse(root_dir=args.data_path, transform=None, disease=args.disease, dataset_mode='frame', mode='rgb', task_mode=args.task_mode, iterate_mode='visit', downsample_width=True, patient_id_list_dir=args.patient_id_list_dir, downsample_normal=args.downsample_normal, multi_task_idx=args.multi_task_idx)
 
@@ -302,68 +298,57 @@ def main(args):
 
 
         elif args.single_fold:
-            train_pat_id = load_patient_list(args.split_path, split='train', name_suffix='_pat_list.txt')
-            val_pat_id = load_patient_list(args.split_path, split='val', name_suffix='_pat_list.txt')
-            test_pat_id = load_patient_list(args.split_path, split='test', name_suffix='_pat_list.txt')
-            included_patient = list(dataset_for_Kfold.patients.keys())
-
-            filtered_train_pat_id = sorted(list(set(train_pat_id) & set(included_patient)))
-            filtered_val_pat_id = sorted(list(set(val_pat_id) & set(included_patient)))
-            filtered_test_pat_id = sorted(list(set(test_pat_id) & set(included_patient)))
-
-            train_pat_indices = dataset_for_Kfold.get_visit_idx(filtered_train_pat_id)
-            val_pat_indices = dataset_for_Kfold.get_visit_idx(filtered_val_pat_id)
-            test_pat_indices = dataset_for_Kfold.get_visit_idx(filtered_test_pat_id)
-
-
-            # OCTCube or RETFound-all
-            if args.patient_dataset_type == '3D' or args.patient_dataset_type == '3D_st' or args.patient_dataset_type == '3D_st_joint' or args.patient_dataset_type.startswith('3D'):
-                if args.few_shot:
-                    if args.downsample_normal:
-                        adjusted_indices = dataset_for_Kfold.adjusted_indices
-                        val_indices = sorted(list(set(val_pat_indices) & set(adjusted_indices)))
-                    else:
-                        val_indices = val_pat_indices
-                    dataset_train = TransformableSubset(dataset_for_Kfold, val_indices)
-                    dataset_val = TransformableSubset(dataset_for_Kfold, train_pat_indices)
-                else:
-                    if args.downsample_normal:
-                        adjusted_indices = dataset_for_Kfold.adjusted_indices
-                        print('len(adjusted_indices):', len(adjusted_indices))
-                        print('len(train_pat_indices):', len(train_pat_indices))
-                        train_indices = sorted(list(set(train_pat_indices) & set(adjusted_indices)))
-                        print('len(train_indices) after:', len(train_indices))
-                    else:
-                        train_indices = train_pat_indices
-                    dataset_train = TransformableSubset(dataset_for_Kfold, train_indices)
-                    dataset_val = TransformableSubset(dataset_for_Kfold, val_pat_indices)
-                dataset_test = TransformableSubset(dataset_for_Kfold, test_pat_indices)
-                dataset_train.update_dataset_transform(train_transform)
-                if args.variable_joint:
-                    dataset_train.update_dataset_transform_high_res(train_transform_high_res)
-
-            # RETFound-center
-            elif args.patient_dataset_type == 'Center2D' or args.patient_dataset_type == 'Center2D_flash_attn':
-                if args.few_shot:
-                    if args.downsample_normal:
-                        adjusted_indices = dataset_for_Kfold.adjusted_indices
-                        val_indices = sorted(list(set(val_pat_indices) & set(adjusted_indices)))
-                    else:
-                        val_indices = val_pat_indices
-                    dataset_train = TransformableSubset(dataset_for_Kfold, val_indices, transform=train_transform)
-                    dataset_val = TransformableSubset(dataset_for_Kfold, train_pat_indices, transform=val_transform)
-                else:
-                    if args.downsample_normal:
-                        adjusted_indices = dataset_for_Kfold.adjusted_indices
-                        print('len(adjusted_indices):', len(adjusted_indices))
-                        print('len(train_pat_indices):', len(train_pat_indices))
-                        train_indices = sorted(list(set(train_pat_indices) & set(adjusted_indices)))
-                        print('len(train_indices) after:', len(train_indices))
-                    else:
-                        train_indices = train_pat_indices
-                    dataset_train = TransformableSubset(dataset_for_Kfold, train_indices, transform=train_transform)
-                    dataset_val = TransformableSubset(dataset_for_Kfold, val_pat_indices, transform=val_transform)
-                dataset_test = TransformableSubset(dataset_for_Kfold, test_pat_indices, transform=val_transform)
+            dataset_train = PatientDataset3D_inhouse(root_dir=args.data_path, transform=None, disease=args.disease,
+                                                     dataset_mode='frame', mode=args.color_mode,
+                                                     task_mode=args.task_mode, iterate_mode='visit',
+                                                     downsample_width=True,
+                                                     patient_id_list_dir=args.patient_id_list_dir,
+                                                     pad_to_num_frames=args.pad_to_num_frames,
+                                                     padding_num_frames=args.num_frames,
+                                                     transform_type=args.transform_type,
+                                                     downsample_normal=args.downsample_normal,
+                                                     same_3_frames=args.same_3_frames,
+                                                     return_both_res_image=args.variable_joint,
+                                                     high_res_transform=None,
+                                                     high_res_num_frames=args.high_res_num_frames,
+                                                     downsample_normal_factor=args.downsample_normal_factor,
+                                                     multi_task_idx=args.multi_task_idx,
+                                                     train_val_test='train'
+                                                     )
+            dataset_val = PatientDataset3D_inhouse(root_dir=args.data_path, transform=None, disease=args.disease,
+                                                     dataset_mode='frame', mode=args.color_mode,
+                                                     task_mode=args.task_mode, iterate_mode='visit',
+                                                     downsample_width=True,
+                                                     patient_id_list_dir=args.patient_id_list_dir,
+                                                     pad_to_num_frames=args.pad_to_num_frames,
+                                                     padding_num_frames=args.num_frames,
+                                                     transform_type=args.transform_type,
+                                                     downsample_normal=args.downsample_normal,
+                                                     same_3_frames=args.same_3_frames,
+                                                     return_both_res_image=args.variable_joint,
+                                                     high_res_transform=None,
+                                                     high_res_num_frames=args.high_res_num_frames,
+                                                     downsample_normal_factor=args.downsample_normal_factor,
+                                                     multi_task_idx=args.multi_task_idx,
+                                                     train_val_test='val'
+                                                     )
+            dataset_test = PatientDataset3D_inhouse(root_dir=args.data_path, transform=None, disease=args.disease,
+                                                     dataset_mode='frame', mode=args.color_mode,
+                                                     task_mode=args.task_mode, iterate_mode='visit',
+                                                     downsample_width=True,
+                                                     patient_id_list_dir=args.patient_id_list_dir,
+                                                     pad_to_num_frames=args.pad_to_num_frames,
+                                                     padding_num_frames=args.num_frames,
+                                                     transform_type=args.transform_type,
+                                                     downsample_normal=args.downsample_normal,
+                                                     same_3_frames=args.same_3_frames,
+                                                     return_both_res_image=args.variable_joint,
+                                                     high_res_transform=None,
+                                                     high_res_num_frames=args.high_res_num_frames,
+                                                     downsample_normal_factor=args.downsample_normal_factor,
+                                                     multi_task_idx=args.multi_task_idx,
+                                                     train_val_test='test'
+                                                     )
 
     num_tasks = misc.get_world_size()
     global_rank = misc.get_rank()
@@ -677,7 +662,7 @@ def main(args):
                         dataset_val.update_dataset_transform_high_res(val_transform_high_res)
 
                 if args.task_mode == 'multi_label' or args.task_mode == 'multi_task' or args.task_mode == 'multi_task_default':
-                    disease_list = dataset_for_Kfold.idx_to_disease
+                    disease_list = dataset_train.idx_to_disease
                 else:
                     disease_list = None
 
@@ -858,7 +843,7 @@ def main(args):
         fold_results_test = []
         fold_results_test_for_best_val = []
 
-        print(f"Start train val test for {len(train_pat_indices)} train, {len(val_pat_indices)} val, {len(test_pat_indices)} test")
+        print(f"Start train val test for {len(dataset_train)} train, {len(dataset_val)} val, {len(dataset_test)} test")
 
         sampler_train = torch.utils.data.DistributedSampler(
             dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
@@ -1205,13 +1190,6 @@ def main(args):
                     param_group['lr'] /= 2
                     print(f"Downscale the learning rate to {param_group['lr']}")
 
-            if args.patient_dataset_type == '3D' or args.patient_dataset_type == '3D_st' or args.patient_dataset_type == '3D_st_joint' or args.patient_dataset_type.startswith('3D'): # OCTCube or RETFound-all
-                dataset_train.remove_dataset_transform()
-                dataset_val.update_dataset_transform(val_transform)
-                if args.variable_joint:
-                    dataset_train.remove_dataset_transform_high_res()
-                    dataset_val.update_dataset_transform_high_res(val_transform_high_res)
-
             if args.task_mode == 'multi_label' or args.task_mode == 'multi_task' or args.task_mode == 'multi_task_default':
                 disease_list = dataset_for_Kfold.idx_to_disease
             else:
@@ -1232,7 +1210,6 @@ def main(args):
             if args.val_metric == 'AUC':
                 print('Use AUC as the validation metric')
                 if max_auc <= val_auc_roc:
-                    max_auc = val_auc_roc
                     if max_auc < val_auc_roc:
                         max_epoch = epoch
                         max_flag = True
@@ -1244,6 +1221,7 @@ def main(args):
                         max_auc_pr = val_auc_pr
                         max_epoch = epoch
                         max_flag = True
+                    max_auc = val_auc_roc
             elif args.val_metric == 'AUPRC':
                 print('Use AUPRC as the validation metric')
                 if max_auc_pr <= val_auc_pr:
@@ -1292,7 +1270,6 @@ def main(args):
                 if args.val_metric == 'AUC':
                     print('Test: Use AUC as the validation metric')
                     if max_auc_test <= test_auc_roc:
-                        max_auc_test = test_auc_roc
                         if max_auc_test < test_auc_roc:
                             max_epoch_test = epoch
                             max_flag_test = True
@@ -1304,6 +1281,7 @@ def main(args):
                             max_auc_pr_test = test_auc_pr
                             max_epoch_test = epoch
                             max_flag_test = True
+                        max_auc_test = test_auc_roc
                 elif args.val_metric == 'AUPRC':
                     print('Test: Use AUPRC as the validation metric')
                     if max_auc_pr_test <= test_auc_pr:
@@ -1369,34 +1347,6 @@ def main(args):
                     log_writer.flush()
                 with open(os.path.join(args.output_dir, "log.txt"), mode="a") as f:
                     f.write(json.dumps(log_stats) + "\n")
-
-            if args.patient_dataset_type == '3D' or args.patient_dataset_type == '3D_st' or args.patient_dataset_type == '3D_st_joint' or args.patient_dataset_type.startswith('3D'):
-                dataset_val.remove_dataset_transform()
-                dataset_train.update_dataset_transform(train_transform)
-                if args.variable_joint:
-                    dataset_val.remove_dataset_transform_high_res()
-                    dataset_train.update_dataset_transform_high_res(train_transform_high_res)
-
-
-            if args.downsample_normal:
-                dataset_train.dataset.on_epoch_end()
-                if args.few_shot:
-                    adjusted_indices = dataset_for_Kfold.adjusted_indices
-                    val_indices = sorted(list(set(val_pat_indices) & set(adjusted_indices)))
-                    dataset_train.update_indices(val_indices)
-                    data_loader_train.sampler.num_samples = math.ceil(len(dataset_train) / num_tasks)
-                    data_loader_train.sampler.total_size = data_loader_train.sampler.num_samples * num_tasks
-
-                else:
-                    print('len(train_indices) before:', len(train_indices))
-                    adjusted_indices = dataset_for_Kfold.adjusted_indices
-                    print('len(adjusted_indices):', len(adjusted_indices))
-                    print('len(train_pat_indices):', len(train_pat_indices))
-                    train_indices = sorted(list(set(train_pat_indices) & set(adjusted_indices)))
-                    print('len(train_indices) after:', len(train_indices))
-                    dataset_train.update_indices(train_indices)
-                    data_loader_train.sampler.num_samples = math.ceil(len(dataset_train) / num_tasks)
-                    data_loader_train.sampler.total_size = data_loader_train.sampler.num_samples * num_tasks
 
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))

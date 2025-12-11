@@ -14,6 +14,8 @@
 import builtins
 import datetime
 import os
+import random
+import subprocess
 import time
 from collections import defaultdict, deque
 from pathlib import Path
@@ -222,25 +224,65 @@ def save_on_master(*args, **kwargs):
         torch.save(*args, **kwargs)
 
 
+def _get_master_port(seed: int = 0) -> int:
+    MIN_MASTER_PORT, MAX_MASTER_PORT = (20_000, 60_000)
+
+    master_port_str = os.environ.get("MASTER_PORT")
+    if master_port_str is None:
+        rng = random.Random(seed)
+        return rng.randint(MIN_MASTER_PORT, MAX_MASTER_PORT)
+
+    return int(master_port_str)
+
 def init_distributed_mode(args):
-    if args.dist_on_itp:
-        args.rank = int(os.environ['OMPI_COMM_WORLD_RANK'])
-        args.world_size = int(os.environ['OMPI_COMM_WORLD_SIZE'])
-        args.gpu = int(os.environ['OMPI_COMM_WORLD_LOCAL_RANK'])
-        args.dist_url = "tcp://%s:%s" % (os.environ['MASTER_ADDR'], os.environ['MASTER_PORT'])
-        os.environ['LOCAL_RANK'] = str(args.gpu)
-        os.environ['RANK'] = str(args.rank)
-        os.environ['WORLD_SIZE'] = str(args.world_size)
+    if args.no_env:
+        pass
+    elif args.dist_on_itp:
+        args.rank = int(os.environ["OMPI_COMM_WORLD_RANK"])
+        args.world_size = int(os.environ["OMPI_COMM_WORLD_SIZE"])
+        args.gpu = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
+        args.dist_url = "tcp://%s:%s" % (
+            os.environ["MASTER_ADDR"],
+            os.environ["MASTER_PORT"],
+        )
+        os.environ["LOCAL_RANK"] = str(args.gpu)
+        os.environ["RANK"] = str(args.rank)
+        os.environ["WORLD_SIZE"] = str(args.world_size)
         # ["RANK", "WORLD_SIZE", "MASTER_ADDR", "MASTER_PORT", "LOCAL_RANK"]
-    elif 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
+    elif "RANK" in os.environ and "WORLD_SIZE" in os.environ:
         args.rank = int(os.environ["RANK"])
-        args.world_size = int(os.environ['WORLD_SIZE'])
-        args.gpu = int(os.environ['LOCAL_RANK'])
-    elif 'SLURM_PROCID' in os.environ:
-        args.rank = int(os.environ['SLURM_PROCID'])
+        args.world_size = int(os.environ["WORLD_SIZE"])
+        args.gpu = int(os.environ["LOCAL_RANK"])
+    elif "SLURM_PROCID" in os.environ:
+        print("--------We are in a SLURM environment!!!-------")
+        proc_id = int(os.environ['SLURM_PROCID'])
+        ntasks = int(os.environ['SLURM_NTASKS'])
+        node_list = os.environ['SLURM_NODELIST']
+        job_id = int(os.environ["SLURM_JOB_ID"])
+
+        args.rank = proc_id
         args.gpu = args.rank % torch.cuda.device_count()
+        args.world_size = ntasks
+        # Not sure when this environment variable could be None, so use a fallback
+        local_rank_env = os.environ.get('SLURM_LOCALID', None)
+        if local_rank_env is not None:
+            local_rank = int(local_rank_env)
+        else:
+            num_gpus = torch.cuda.device_count()
+            local_rank = proc_id % num_gpus
+        torch.cuda.set_device(local_rank)
+        addr = subprocess.getoutput(
+            f'scontrol show hostname {node_list} | head -n1')
+        port = _get_master_port(seed=job_id)
+        os.environ['MASTER_PORT'] = str(port)
+        # use MASTER_ADDR in the environment variable if it already exists
+        if 'MASTER_ADDR' not in os.environ:
+            os.environ['MASTER_ADDR'] = addr
+        os.environ['WORLD_SIZE'] = str(ntasks)
+        os.environ['LOCAL_RANK'] = str(local_rank)
+        os.environ['RANK'] = str(proc_id)
     else:
-        print('Not using distributed mode')
+        print("Not using distributed mode")
         setup_for_distributed(is_master=True)  # hack
         args.distributed = False
         return
@@ -248,11 +290,19 @@ def init_distributed_mode(args):
     args.distributed = True
 
     torch.cuda.set_device(args.gpu)
-    args.dist_backend = 'nccl'
-    print('| distributed init (rank {}): {}, gpu {}'.format(
-        args.rank, args.dist_url, args.gpu), flush=True)
-    torch.distributed.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
-                                         world_size=args.world_size, rank=args.rank)
+    args.dist_backend = "nccl"
+    print(
+        "| distributed init (rank {}): {}, gpu {}".format(
+            args.rank, args.dist_url, args.gpu
+        ),
+        # flush=True,
+    )
+    torch.distributed.init_process_group(
+        backend=args.dist_backend,
+        # init_method=args.dist_url,
+        # world_size=args.world_size,
+        # rank=args.rank,
+    )
     torch.distributed.barrier()
     setup_for_distributed(args.rank == 0)
 
