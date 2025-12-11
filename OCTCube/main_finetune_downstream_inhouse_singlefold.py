@@ -583,7 +583,7 @@ def main(args):
             print("accumulate grad iterations: %d" % args.accum_iter)
             print("effective batch size: %d" % eff_batch_size)
             if args.distributed:
-                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
+                model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
                 model_without_ddp = model.module
 
             # build optimizer with layer-wise lr decay (lrd)
@@ -1103,7 +1103,7 @@ def main(args):
         print("effective batch size: %d" % eff_batch_size)
 
         if args.distributed:
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
             model_without_ddp = model.module
 
         # build optimizer with layer-wise lr decay (lrd)
