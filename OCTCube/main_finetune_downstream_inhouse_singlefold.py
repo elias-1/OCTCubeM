@@ -1191,7 +1191,7 @@ def main(args):
                     print(f"Downscale the learning rate to {param_group['lr']}")
 
             if args.task_mode == 'multi_label' or args.task_mode == 'multi_task' or args.task_mode == 'multi_task_default':
-                disease_list = dataset_for_Kfold.idx_to_disease
+                disease_list = dataset_train.idx_to_disease
             else:
                 disease_list = None
             val_stats, val_auc_roc, val_auc_pr = evaluate(data_loader_val, model, device, args.task, epoch, mode=val_mode, num_class=args.nb_classes, criterion=criterion, task_mode=args.task_mode, disease_list=disease_list, return_bal_acc=args.return_bal_acc, args=args)
