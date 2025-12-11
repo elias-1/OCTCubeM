@@ -4,7 +4,7 @@
 #SBATCH --job-name=OCTCubeM-OCTCube
 # Specify the number of nodes and processors and gpus per nodes
 #SBATCH --nodes=1 --ntasks-per-node=1 --gpus-per-node=1
-#SBATCH --cpus-per-task=17
+#SBATCH --cpus-per-task=25
 
 
 # For ascend cluster, we have nextgen and quad nodes
@@ -49,6 +49,7 @@ python -m main_finetune_downstream_inhouse_singlefold --nb_classes 8 \
     --enable_early_stop \
     --early_stop_patience 8 \
     --val_metric AUC \
+    --num_workers 24 \
     --input_size 256 \
     --log_dir ./ \
     --output_dir ${OUTPUT_DIR} \

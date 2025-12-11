@@ -4,7 +4,7 @@
 #SBATCH --job-name=OCTCubeM-Pre-training
 # Specify the number of nodes and processors and gpus per nodes
 #SBATCH --nodes=1 --ntasks-per-node=1 --gpus-per-node=1
-#SBATCH --cpus-per-task=17
+#SBATCH --cpus-per-task=25
 
 
 # For ascend cluster, we have nextgen and quad nodes
