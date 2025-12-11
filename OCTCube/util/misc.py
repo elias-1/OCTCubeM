@@ -235,9 +235,7 @@ def _get_master_port(seed: int = 0) -> int:
     return int(master_port_str)
 
 def init_distributed_mode(args):
-    if args.no_env:
-        pass
-    elif args.dist_on_itp:
+    if args.dist_on_itp:
         args.rank = int(os.environ["OMPI_COMM_WORLD_RANK"])
         args.world_size = int(os.environ["OMPI_COMM_WORLD_SIZE"])
         args.gpu = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
