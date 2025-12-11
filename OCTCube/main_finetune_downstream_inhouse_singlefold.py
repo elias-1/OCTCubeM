@@ -298,7 +298,7 @@ def main(args):
 
 
         elif args.single_fold:
-            dataset_train = PatientDataset3D_inhouse(root_dir=args.data_path, transform=None, disease=args.disease,
+            dataset_train = PatientDataset3D_inhouse(root_dir=args.data_path, transform=train_transform, disease=args.disease,
                                                      dataset_mode='frame', mode=args.color_mode,
                                                      task_mode=args.task_mode, iterate_mode='visit',
                                                      downsample_width=True,
@@ -315,7 +315,7 @@ def main(args):
                                                      multi_task_idx=args.multi_task_idx,
                                                      train_val_test='train'
                                                      )
-            dataset_val = PatientDataset3D_inhouse(root_dir=args.data_path, transform=None, disease=args.disease,
+            dataset_val = PatientDataset3D_inhouse(root_dir=args.data_path, transform=val_transform, disease=args.disease,
                                                      dataset_mode='frame', mode=args.color_mode,
                                                      task_mode=args.task_mode, iterate_mode='visit',
                                                      downsample_width=True,
@@ -332,7 +332,7 @@ def main(args):
                                                      multi_task_idx=args.multi_task_idx,
                                                      train_val_test='val'
                                                      )
-            dataset_test = PatientDataset3D_inhouse(root_dir=args.data_path, transform=None, disease=args.disease,
+            dataset_test = PatientDataset3D_inhouse(root_dir=args.data_path, transform=val_transform, disease=args.disease,
                                                      dataset_mode='frame', mode=args.color_mode,
                                                      task_mode=args.task_mode, iterate_mode='visit',
                                                      downsample_width=True,
