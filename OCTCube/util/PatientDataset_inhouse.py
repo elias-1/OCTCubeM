@@ -438,6 +438,12 @@ class PatientDataset3D_inhouse(PatientDatasetCenter2D_inhouse):
             mode (str): 'rgb', 'gray'
 
         """
+        self.mode = mode
+        self.downsample_width = downsample_width
+        self.transform = transform
+        self.transform_type = transform_type
+        self.padding_num_frames = padding_num_frames
+        self.convert_to_tensor = convert_to_tensor
         self.pad_to_num_frames = pad_to_num_frames
         self.padding_num_frames = padding_num_frames
         self.transform_type = transform_type
