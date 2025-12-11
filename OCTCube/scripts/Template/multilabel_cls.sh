@@ -20,9 +20,9 @@
 # Specify an account when more than one available
 #SBATCH --account=PCON0023
 
-#SBATCH --output=log_pt/%j_0_log.out
+#SBATCH --output=outputs_ft_st/%j_0_log.out
 
-#SBATCH --error=log_pt/%j_0_log.err
+#SBATCH --error=outputs_ft_st/%j_0_log.err
 
 
 # Load modules:
