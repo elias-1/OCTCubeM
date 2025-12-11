@@ -1276,6 +1276,8 @@ def main(args):
                     print('Test: Use AUC as the validation metric')
                     if max_auc_test <= test_auc_roc:
                         if max_auc_test < test_auc_roc:
+                            max_accuracy_test = test_stats['acc1']
+                            max_auc_pr_test = test_auc_pr
                             max_epoch_test = epoch
                             max_flag_test = True
                         max_auc_test = test_auc_roc
