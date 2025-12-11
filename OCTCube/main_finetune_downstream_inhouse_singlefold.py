@@ -1212,16 +1212,21 @@ def main(args):
                 if max_auc <= val_auc_roc:
                     if max_auc < val_auc_roc:
                         max_epoch = epoch
-                        max_flag = True
-                    elif max_accuracy <= val_stats['acc1']:
+                        max_auc_pr = val_auc_pr
                         max_accuracy = val_stats['acc1']
+                        max_flag = True
+                    max_auc = val_auc_roc
+                    if max_accuracy <= val_stats['acc1']:
+                        max_accuracy = val_stats['acc1']
+                        max_auc_pr = val_auc_pr
                         max_epoch = epoch
                         max_flag = True
                     elif max_auc_pr <= val_auc_pr:
                         max_auc_pr = val_auc_pr
+                        max_accuracy = val_stats['acc1']
                         max_epoch = epoch
                         max_flag = True
-                    max_auc = val_auc_roc
+
             elif args.val_metric == 'AUPRC':
                 print('Use AUPRC as the validation metric')
                 if max_auc_pr <= val_auc_pr:
@@ -1273,15 +1278,18 @@ def main(args):
                         if max_auc_test < test_auc_roc:
                             max_epoch_test = epoch
                             max_flag_test = True
-                        elif max_accuracy_test <= test_stats['acc1']:
+                        max_auc_test = test_auc_roc
+                        if max_accuracy_test <= test_stats['acc1']:
                             max_accuracy_test = test_stats['acc1']
+                            max_auc_pr_test = test_auc_pr
                             max_epoch_test = epoch
                             max_flag_test = True
                         elif max_auc_pr_test <= test_auc_pr:
                             max_auc_pr_test = test_auc_pr
+                            max_accuracy_test = test_stats['acc1']
                             max_epoch_test = epoch
                             max_flag_test = True
-                        max_auc_test = test_auc_roc
+
                 elif args.val_metric == 'AUPRC':
                     print('Test: Use AUPRC as the validation metric')
                     if max_auc_pr_test <= test_auc_pr:
