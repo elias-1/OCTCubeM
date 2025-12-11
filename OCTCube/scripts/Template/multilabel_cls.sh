@@ -50,7 +50,7 @@ python -m main_finetune_downstream_inhouse_singlefold --nb_classes 8 \
     --early_stop_patience 8 \
     --val_metric AUC \
     --input_size 256 \
-    --log_dir log_pt \
+    --log_dir log_pt/ \
     --output_dir ${OUTPUT_DIR} \
     --batch_size 1 \
     --warmup_epochs 2 \
